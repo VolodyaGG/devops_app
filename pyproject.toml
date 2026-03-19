@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "app"
+version = "1.0.0"
+description = "Currency Service"
+authors = ["v.laptev"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.10"
+fastapi = "^0.100.0"
+uvicorn = "^0.23.0"
+requests = "^2.31.0"
+python-dotenv = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
