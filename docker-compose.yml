@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    read_only: true
+    command: python main.py
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    environment:
+      - PORT=${PORT:-8000}
+      - AUTHOR=${AUTHOR:-v.laptev}
+      - SERVICE=${SERVICE:-currency}
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
