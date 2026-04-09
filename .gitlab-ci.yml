@@ -1,4 +1,92 @@
-include:
-  - project: education/devops/automation/ci
-    ref: master
-    file: ci.yml
+stages:
+  - lint
+  - build
+  - test
+  - deploy
+
+linter_code:
+  stage: lint
+  tags:
+    - docker-runner
+  image: ghcr.io/astral-sh/ruff@sha256:16f448a70ea77283d27382fb865872357b6a481fa5285e59824bf96112cbabbc
+  script:
+    - ruff check . --exclude .venv --exclude .git
+    - echo "Ruff check passed successfully! All code style looks good"
+
+linter_dockerfile:
+  stage: lint
+  tags:
+    - docker-runner
+  image: hadolint/hadolint@sha256:7aba693c1442eb31c0b015c129697cb3b6cb7da589d85c7562f9deb435a6657c
+  script:
+    - hadolint Dockerfile
+    - echo "Hadolint check passed successfully! Dockerfile looks good"
+
+build_dev:
+  stage: build
+  tags:
+    - docker-runner
+  image:
+    name: gcr.io/kaniko-project/executor:debug@sha256:2562c4fe551399514277ffff7dcca9a3b1628c4ea38cb017d7286dc6ea52f4cd
+    entrypoint: [""]
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$(echo -n $DOCKER_LOGIN:$DOCKER_PASSWORD | base64 -w 0)\"}}}" > /kaniko/.docker/config.json
+  script:
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile Dockerfile
+      --target development
+      --destination $DOCKER_LOGIN/client_server_app:development-$CI_COMMIT_SHA
+
+build_prod:
+  stage: build
+  tags:
+    - docker-runner
+  image:
+    name: gcr.io/kaniko-project/executor:debug@sha256:2562c4fe551399514277ffff7dcca9a3b1628c4ea38cb017d7286dc6ea52f4cd
+    entrypoint: [""]
+  before_script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"https://index.docker.io/v1/\":{\"auth\":\"$(echo -n $DOCKER_LOGIN:$DOCKER_PASSWORD | base64 -w 0)\"}}}" > /kaniko/.docker/config.json
+  script:
+    - /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile Dockerfile
+      --target production
+      --destination $DOCKER_LOGIN/client_server_app:production-$CI_COMMIT_SHA
+
+unit_tests:
+  stage: test
+  tags:
+    - docker-runner
+  image: $DOCKER_LOGIN/client_server_app:development-$CI_COMMIT_SHA
+  script: python -m pytest -v tests/test_unit.py
+
+integration_tests:
+  stage: test
+  tags:
+    - docker-runner
+  image: $DOCKER_LOGIN/client_server_app:development-$CI_COMMIT_SHA
+  script: python -m pytest -v tests/test_integration.py
+
+deploy:
+  stage: deploy
+  tags:
+    - docker-runner
+  image: alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
+  only:
+    - master
+  when: manual
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" | ssh-add -
+    - chmod 700 ~/.ssh
+    - ssh-keyscan $SERVER_IP >> ~/.ssh/known_hosts
+  script:
+    - scp docker-compose.hardened.yml $SERVER_USER@$SERVER_IP:/home/deploy/
+    - ssh $SERVER_USER@$SERVER_IP "
+        docker pull $DOCKER_LOGIN/client_server_app:production-$CI_COMMIT_SHA &&
+        IMAGE=$DOCKER_LOGIN/client_server_app:production-$CI_COMMIT_SHA docker compose -f docker-compose.hardened.yml up -d"

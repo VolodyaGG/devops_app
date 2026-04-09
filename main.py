@@ -1,4 +1,6 @@
-import fastapi, uvicorn, os
+import fastapi
+import uvicorn
+import os
 from dotenv import load_dotenv
 import app.infrastructure.adapter as CurrencyAdapter
 import app.application.services as CurrencyService
