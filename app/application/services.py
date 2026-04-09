@@ -18,7 +18,7 @@ class CurrencyService:
             char_code = char_code.upper()
             return {char_code: result.get(char_code)}
         return result
-    
+
     def get_service_info(self):
         load_dotenv()
         return ServiceInfo(

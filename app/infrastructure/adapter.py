@@ -1,4 +1,5 @@
-import requests, xml.etree.ElementTree as ET
+import requests
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from app.application.ports import CurrencyPort
 from app.domain.currency import CurrencyInfo
