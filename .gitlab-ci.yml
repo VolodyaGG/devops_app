@@ -1,31 +1,68 @@
 stages:
-  - lint
-  - build
+  - lint_and_sast
   - test
-  - deploy
+  - build_and_push
+  - sca
+  - release
+  - trigger_deploy
 
-linter_code:
-  stage: lint
+variables:
+  DEPLOY_ENV:
+    value: staging
+    description: "Deployment environment (staging or production)"
+    options:
+      - staging
+      - production
+  IMAGE_TAG:
+    value: "${CI_COMMIT_TAG:-$CI_COMMIT_SHA}"
+
+lint:
+  stage: lint_and_sast
   tags:
     - docker-runner
-  image: ghcr.io/astral-sh/ruff@sha256:16f448a70ea77283d27382fb865872357b6a481fa5285e59824bf96112cbabbc
+  image: nixos/nix@sha256:a83a3149cdc8196e168097d386c5133a174cf42a4fe658b397e1f4d500ad8f00
+  needs: []
   script:
-    - ruff check . --exclude .venv --exclude .git
-    - echo "Ruff check passed successfully! All code style looks good"
+    - nix-shell -p ruff --run "ruff check . --output-format junit --output-file ruff_results.xml"
+    - nix-shell -p hadolint --run "hadolint Dockerfile --format json > hadolint_results.json"
+  artifacts:
+    when: always
+    paths:
+      - ruff_results.xml
+      - hadolint_results.json
+    expire_in: 30 days
+    reports:
+      junit: ruff_results.xml
+  rules:
+    - when: always
 
-linter_dockerfile:
-  stage: lint
+sast:
+  stage: lint_and_sast
   tags:
     - docker-runner
-  image: hadolint/hadolint@sha256:7aba693c1442eb31c0b015c129697cb3b6cb7da589d85c7562f9deb435a6657c
+  needs: []
+  image: python:3.12-alpine@sha256:1d132f2d802114876d114b0918e01998bf0c07af8332f776c3c4cb8e388c9a5f
+  variables:
+    PIP_NO_CACHE_DIR: "1"
   script:
-    - hadolint Dockerfile
-    - echo "Hadolint check passed successfully! Dockerfile looks good"
+    - pip install bandit bandit-sarif-formatter
+    - bandit -r . -f sarif -o bandit-results.sarif || true
+  artifacts:
+    when: always
+    paths:
+      - bandit-results.sarif
+    reports:
+      sast: bandit-results.sarif
+  rules:
+    - when: always
 
 build_dev:
-  stage: build
+  stage: test
   tags:
     - docker-runner
+  needs:
+    - lint
+    - sast
   image:
     name: gcr.io/kaniko-project/executor:debug@sha256:2562c4fe551399514277ffff7dcca9a3b1628c4ea38cb017d7286dc6ea52f4cd
     entrypoint: [""]
@@ -37,10 +74,61 @@ build_dev:
       --context $CI_PROJECT_DIR
       --dockerfile Dockerfile
       --target development
-      --destination $DOCKER_LOGIN/client_server_app:development-$CI_COMMIT_SHA
+      --destination $DOCKER_LOGIN/client_server_app:development-${IMAGE_TAG}
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_TAG
 
-build_prod:
-  stage: build
+unit_tests:
+  stage: test
+  needs:
+    - build_dev
+  tags:
+    - docker-runner
+  image: $DOCKER_LOGIN/client_server_app:development-$IMAGE_TAG
+  script: python -m pytest -v tests/test_unit.py
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_TAG
+
+integration_tests:
+  stage: test
+  needs:
+    - build_dev
+  tags:
+    - docker-runner
+  image: $DOCKER_LOGIN/client_server_app:development-$IMAGE_TAG
+  script: python -m pytest -v tests/test_integration.py
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_TAG
+
+build_and_push:
+  stage: build_and_push
+  needs:
+    - unit_tests
+    - integration_tests
   tags:
     - docker-runner
   image:
@@ -54,39 +142,99 @@ build_prod:
       --context $CI_PROJECT_DIR
       --dockerfile Dockerfile
       --target production
-      --destination $DOCKER_LOGIN/client_server_app:production-$CI_COMMIT_SHA
+      --destination $DOCKER_LOGIN/client_server_app:production-$IMAGE_TAG
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+          IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+          IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+          IMAGE_TAG: $CI_COMMIT_TAG
 
-unit_tests:
-  stage: test
+sca:
+  stage: sca
+  needs:
+    - build_and_push
   tags:
     - docker-runner
-  image: $DOCKER_LOGIN/client_server_app:development-$CI_COMMIT_SHA
-  script: python -m pytest -v tests/test_unit.py
+  image:
+    name: aquasec/trivy:0.69.3@sha256:7228e304ae0f610a1fad937baa463598cadac0c2ac4027cc68f3a8b997115689
+    entrypoint: [""]
+  variables:
+    TRIVY_CACHE_DIR: "/tmp/trivy_cache"
+  script: trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format sarif --output trivy_results.sarif $DOCKER_LOGIN/client_server_app:production-$IMAGE_TAG
+  artifacts:
+    when: always
+    paths:
+      - trivy_results.sarif
+    expire_in: 30 days
+    reports:
+      sast: trivy_results.sarif
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+          IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+          IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+          IMAGE_TAG: $CI_COMMIT_TAG
 
-integration_tests:
-  stage: test
+release:
+  stage: release
+  needs:
+    - sca
   tags:
     - docker-runner
-  image: $DOCKER_LOGIN/client_server_app:development-$CI_COMMIT_SHA
-  script: python -m pytest -v tests/test_integration.py
-
-deploy:
-  stage: deploy
-  tags:
-    - docker-runner
-  image: alpine:3.19@sha256:6baf43584bcb78f2e5847d1de515f23499913ac9f12bdf834811a3145eb11ca1
-  only:
-    - master
-  when: manual
-  before_script:
-    - apk add --no-cache openssh-client
-    - eval $(ssh-agent -s)
-    - mkdir -p ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" | ssh-add -
-    - chmod 700 ~/.ssh
-    - ssh-keyscan $SERVER_IP >> ~/.ssh/known_hosts
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  variables:
+    GIT_DEPTH: 0
   script:
-    - scp docker-compose.hardened.yml $SERVER_USER@$SERVER_IP:/home/deploy/
-    - ssh $SERVER_USER@$SERVER_IP "
-        docker pull $DOCKER_LOGIN/client_server_app:production-$CI_COMMIT_SHA &&
-        IMAGE=$DOCKER_LOGIN/client_server_app:production-$CI_COMMIT_SHA docker compose -f docker-compose.hardened.yml up -d"
+    - git fetch --tags
+    - PREVIOUS_TAG=$(git describe --tags --abbrev=0 $CI_COMMIT_TAG^ 2>/dev/null || echo "")
+    - |
+      if [ -n "$PREVIOUS_TAG" ]; then
+        echo "## Changes since $PREVIOUS_TAG" > release_notes.md
+        git log --pretty=format:"* %s (%h)" ${PREVIOUS_TAG}..${CI_COMMIT_TAG} >> release_notes.md
+      else
+        echo "## Initial release" > release_notes.md
+        git log --pretty=format:"* %s (%h)" >> release_notes.md
+      fi
+    - cat release_notes.md
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    description: './release_notes.md'
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+
+trigger_deploy:
+  stage: trigger_deploy
+  needs:
+    - job: build_and_push
+      optional: true
+  trigger:
+    include: .deploy-config.yml
+    strategy: depend
+  variables:
+    PORT: $PORT
+    SERVICE: $SERVICE
+    DOCKER_LOGIN: $DOCKER_LOGIN
+    STAGING_IP: $STAGING_IP
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+        ENVIRONMENT: staging
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+        ENVIRONMENT: production
+        IMAGE_TAG: $CI_COMMIT_TAG
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+      variables:
+        ENVIRONMENT: $ENVIRONMENT
+        IMAGE_TAG: $IMAGE_TAG
