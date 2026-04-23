@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: instance
+  gather_facts: false
+  tasks:
+    - name: Check kubeadm binary
+      ansible.builtin.stat:
+        path: /usr/bin/kubeadm
+      register: kubeadm_bin
+
+    - name: Check kubeadm is executable
+      ansible.builtin.assert:
+        that:
+          - kubeadm_bin.stat.exists
+          - kubeadm_bin.stat.mode == '0755'
+
+    - name: Check kubeadm version
+      ansible.builtin.command: kubeadm version
+      register: kubeadm_ver
+      changed_when: false
+
+    - name: Check kubeadm command works
+      ansible.builtin.assert:
+        that:
+          - kubeadm_ver.rc == 0

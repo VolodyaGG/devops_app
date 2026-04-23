@@ -1,0 +1,12 @@
+---
+namespace: "vlaptev"
+name: "k8s"
+readme: README.md
+version: 1.3.0
+authors:
+  - "Vladimir Laptev"
+
+description: Collection for vlaptev.k8s playbook project
+license: ["GPL-3.0-or-later"]
+tags: ["tools"]
+repository: NA

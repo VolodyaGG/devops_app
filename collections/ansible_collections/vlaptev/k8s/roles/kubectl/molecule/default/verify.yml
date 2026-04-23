@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: instance
+  gather_facts: false
+  tasks:
+    - name: Check kubectl binary
+      ansible.builtin.stat:
+        path: /usr/bin/kubectl
+      register: kubectl_bin
+
+    - name: Check kubectk is executable
+      ansible.builtin.assert:
+        that:
+          - kubectl_bin.stat.exists
+          - kubectl_bin.stat.mode == '0755'
+
+    - name: Check kubectl version
+      ansible.builtin.command: kubectl version --client
+      register: kubectl_ver
+      changed_when: false
+
+    - name: Check kubectl command works
+      ansible.builtin.assert:
+        that:
+          - kubectl_ver.rc == 0

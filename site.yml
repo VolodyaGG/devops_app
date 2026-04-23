@@ -1,0 +1,51 @@
+---
+- name: Install k8s components
+  hosts: k8s_cluster
+  become: true
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Disable swap
+      ansible.builtin.command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+
+    - name: Remove swap
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        regexp: '\sswap\s'
+        state: absent
+
+  roles:
+    - role: vlaptev.k8s.crio
+    - role: vlaptev.k8s.kubeadm
+    - role: vlaptev.k8s.kubelet
+    - role: vlaptev.k8s.kubectl
+
+  post_tasks:
+    - name: Restart daemon
+      ansible.builtin.systemd:
+        daemon_reload: yes
+
+    - name: Run crio
+      ansible.builtin.systemd:
+        name: crio
+        state: started
+        enabled: yes
+
+    - name: Run kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        enabled: yes
+        state: started
+
+- name: Initialize master node
+  hosts: masters
+  become: true
+  tasks:
+    - name: Initialize cluster
+      ansible.builtin.command:
+        cmd: kubeadm init --pod-network-cidr=10.244.0.0/16 --cri-socket=unix:///var/run/crio/crio.sock
+        creates: /etc/kubernetes/admin.conf
