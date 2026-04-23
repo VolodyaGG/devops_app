@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: instance
+  gather_facts: false
+  tasks:
+    - name: Check CRIO binary
+      ansible.builtin.stat:
+        path: /usr/bin/crio
+      register: crio_bin
+
+    - name: Assert CRIO installed
+      ansible.builtin.assert:
+        that:
+          - crio_bin.stat.exists
+          - crio_bin.stat.mode == '0755'
+
+    - name: Check CRIO version
+      ansible.builtin.command: crio --version
+      register: crio_ver
+      changed_when: false
+
+    - name: Assert CRIO version
+      ansible.builtin.assert:
+        that:
+          - crio_ver.rc == 0

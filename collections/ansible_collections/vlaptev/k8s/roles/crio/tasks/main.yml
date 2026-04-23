@@ -1,0 +1,46 @@
+---
+- name: Prepare kernel
+  community.general.modprobe:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - overlay
+    - br_netfilter
+  tags: skip_in_docker
+
+- name: Save modules
+  ansible.builtin.copy:
+    dest: /etc/modules-load.d/k8s.conf
+    content: |
+      overlay
+      br_netfilter
+    mode: '0644'
+
+- name: Set network parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop:
+    - {key: 'net.bridge.bridge-nf-call-iptables', value: 1}
+    - {key: 'net.bridge.bridge-nf-call-ip6tables', value: 1}
+    - {key: 'net.ipv4.ip_forward', value: 1}
+
+- name: Add CRI-O key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/addons:/cri-o:/stable:/v{{ crio_version }}/deb/Release.key"
+    dest: /etc/apt/keyrings/cri-o-archive-keyring.asc
+    mode: '0644'
+
+- name: Add CRI-O repository
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/cri-o-archive-keyring.asc] https://pkgs.k8s.io/addons:/cri-o:/stable:/v{{ crio_version }}/deb/ /"
+    state: present
+
+- name: Install CRI-O
+  ansible.builtin.apt:
+    name: cri-o
+    state: present
+    update_cache: yes
+

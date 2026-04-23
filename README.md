@@ -1,3 +1,59 @@
+# ДЗ 4
+## Ansible-роли для Kubernetes
+
+В рамках ДЗ4 были собраны 4 роли для подготовки Kubernetes-узла на Debian/Ubuntu:
+
+- vlaptev.k8s.crio - устанавливает CRI-O, подключает нужный репозиторий, загружает модули ядра и настраивает sysctl.
+- vlaptev.k8s.kubeadm - устанавливает kubeadm, добавляет Kubernetes-репозиторий и фиксирует пакет через hold.
+- vlaptev.k8s.kubelet - устанавливает kubelet, подключает репозиторий Kubernetes и также удерживает пакет от случайного обновления.
+- vlaptev.k8s.kubectl - устанавливает kubectl, создает .kube для пользователя и добавляет bash-completion.
+
+### Зависимости
+
+- Ansible
+- коллекция community.general
+- коллекция ansible.posix
+- Debian/Ubuntu с пакетным менеджером apt
+- Docker и Molecule для локальной проверки роли
+
+### Переменные роли
+
+- crio_version
+  Значение по умолчанию: "1.32"
+  Используется в роли crio для выбора версии CRI-O.
+
+- k8s_version
+  Значение по умолчанию: "1.32"
+  Используется в ролях kubeadm, kubelet и kubectl для выбора версии Kubernetes-репозитория.
+
+- k8s_user
+  Значение по умолчанию: "worker"
+  Используется для создания пользователя и директории .kube.
+
+### Пример использования в playbook
+
+```yaml
+---
+- name: Install k8s components
+  hosts: k8s_cluster
+  become: true
+  roles:
+    - role: vlaptev.k8s.crio
+    - role: vlaptev.k8s.kubeadm
+    - role: vlaptev.k8s.kubelet
+    - role: vlaptev.k8s.kubectl
+```
+
+### Vault
+
+Зашифрован пароль для входа на ВМ. Переменные вынесены в inventory/group_vars/all/vault.yml, а в inventory/group_vars/all/vars.yml они подключаются как обычные переменные, например для ansible_password и ansible_become_password
+
+В ansible.cfg настроен параметр vault_password_file = .vault_pass, поэтому пароль для расшифровки Vault читается из локального файла .vault_pass
+
+### Проверка
+
+Для каждой роли добавлен отдельный Molecule-сценарий default. Проверка запускается в Docker-контейнере и подтверждает, что нужный пакет установлен, бинарник присутствует в системе и основная команда crio, kubeadm, kubelet или kubectl успешно запускается
+
 # ДЗ 3
 ## Advanced CI
 ### 1. Структура пайплайна
@@ -168,6 +224,3 @@ CVE-2026-34591 (Poetry): в образе была установлена вер�
 if (coffee.empty()):
     code.stop()
 ```
-
-
-

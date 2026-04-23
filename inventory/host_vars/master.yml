@@ -1,0 +1,4 @@
+---
+ansible_host: 10.184.0.116
+ansible_user: master
+k8s_user: master

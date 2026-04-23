@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: instance
+  gather_facts: false
+  tasks:
+    - name: Check kubelet binary
+      ansible.builtin.stat:
+        path: /usr/bin/kubelet
+      register: kubelet_bin
+
+    - name: Check kubelet is executable
+      ansible.builtin.assert:
+        that:
+          - kubelet_bin.stat.exists
+          - kubelet_bin.stat.mode == '0755'
+
+    - name: Check kubelet version
+      ansible.builtin.command: kubelet --version
+      register: kubelet_ver
+      changed_when: false
+
+    - name: Check kubelet command works
+      ansible.builtin.assert:
+        that:
+          - kubelet_ver.rc == 0

@@ -1,0 +1,42 @@
+---
+- name: Create kubectl user
+  ansible.builtin.user:
+    name: "{{ k8s_user }}"
+    state: present
+    create_home: true
+
+- name: Create keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Add k8s key
+  ansible.builtin.get_url:
+    url: "https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/Release.key"
+    dest: /etc/apt/keyrings/k8s-apt-keyring.asc
+    mode: '0644'
+
+- name: Add k8s repo
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/k8s-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /"
+    state: present
+
+- name: Install kubectl
+  ansible.builtin.apt:
+    name: kubectl
+    state: present
+    update_cache: yes
+
+- name: Create .kube directory
+  ansible.builtin.file:
+    path: "~{{ k8s_user }}/.kube"
+    state: directory
+    mode: "0744"
+    owner: "{{ k8s_user }}"
+
+- name: Add kubectl to bashrc
+  ansible.builtin.lineinfile:
+    path: "~{{ k8s_user }}/.bashrc"
+    line: 'source <(kubectl completion bash)'
+    state: present

@@ -1,0 +1,3 @@
+---
+k8s_version: "1.32"
+crio_version: "1.32"
