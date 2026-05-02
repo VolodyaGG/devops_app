@@ -1,0 +1,26 @@
+---
+- name: Converge master
+  hosts: masters
+  become: true
+  tasks:
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.preps
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.crio
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.k8s_base
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.k8s_master
+
+- name: Converge worker
+  hosts: workers
+  become: true
+  tasks:
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.preps
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.crio
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.k8s_base
+    - ansible.builtin.include_role:
+        name: vlaptev.k8s.k8s_worker

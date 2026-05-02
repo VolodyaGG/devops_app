@@ -44,3 +44,32 @@
     state: present
     update_cache: yes
 
+- name: Start CRI-O
+  ansible.builtin.systemd:
+    name: crio
+    state: started
+    enabled: yes
+
+- name: Configure crio default capabilities
+  ansible.builtin.blockinfile:
+    path: /etc/crio/crio.conf.d/10-crio.conf
+    insertafter: '\[crio.runtime\]'
+    block: |
+      default_capabilities = [
+        "CHOWN",
+        "DAC_OVERRIDE",
+        "FSETID",
+        "FOWNER",
+        "SETGID",
+        "SETUID",
+        "SETPCAP",
+        "NET_BIND_SERVICE",
+        "KILL",
+        "NET_RAW"
+      ]
+
+- name: Restart crio
+  ansible.builtin.systemd:
+    name: crio
+    state: restarted
+  changed_when: false

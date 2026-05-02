@@ -1,6 +1,6 @@
 ---
 - name: Verify
-  hosts: instance
+  hosts: all
   gather_facts: false
   tasks:
     - name: Check CRIO binary
@@ -23,3 +23,21 @@
       ansible.builtin.assert:
         that:
           - crio_ver.rc == 0
+
+    - name: Check CRI-O is running
+      ansible.builtin.service_facts:
+
+    - name: Assert CRI-O is running
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['crio.service'].state == 'running'
+          - ansible_facts.services['crio.service'].status == 'enabled'
+
+    - name: Check NET_RAW capability in crio config
+      ansible.builtin.command: grep -c "NET_RAW" /etc/crio/crio.conf.d/10-crio.conf
+      register: net_raw
+      changed_when: false
+
+    - name: Assert NET_RAW is configured
+      ansible.builtin.assert:
+        that: net_raw.stdout | int > 0

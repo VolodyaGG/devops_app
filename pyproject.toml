@@ -25,5 +25,6 @@ dev = [
     "molecule (>=26.4.0,<27.0.0)",
     "molecule-docker (==2.0.0)",
     "docker (>=7.1.0,<8.0.0)",
-    "testinfra (>=6.0.0,<7.0.0)"
+    "testinfra (>=6.0.0,<7.0.0)",
+    "molecule-plugins (>=25.8.12,<26.0.0)"
 ]

@@ -1,0 +1,23 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: "{{ k8s_user }}"
+  tasks:
+    - name: Check kubectl get nodes
+      ansible.builtin.command: kubectl get nodes
+      register: nodes
+      changed_when: false
+
+    - name: Show nodes
+      ansible.builtin.debug:
+        msg: "{{ nodes.stdout }}"
+
+    - name: Assert master is present
+      ansible.builtin.assert:
+        that: "'control-plane' in nodes.stdout"
+
+    - name: Check cluster info
+      ansible.builtin.command: kubectl cluster-info
+      changed_when: false

@@ -1,0 +1,3 @@
+---
+k8s_user: "worker"
+calico_version: "3.31.5"

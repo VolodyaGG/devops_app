@@ -1,0 +1,22 @@
+---
+- name: Destroy
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Restore swap in fstab
+      ansible.builtin.shell:
+        cmd: cat /etc/molecule-swap-backup >> /etc/fstab
+      args:
+        removes: /etc/molecule-swap-backup
+      failed_when: false
+
+    - name: Remove backup file
+      ansible.builtin.file:
+        path: /etc/molecule-swap-backup
+        state: absent
+
+    - name: Enable swap
+      ansible.builtin.command: swapon -a
+      changed_when: false
+      failed_when: false

@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check "{{ item }}" binary
+      ansible.builtin.stat:
+        path: "/usr/bin/{{ item }}"
+      register: bin_stat
+      loop: "{{ k8s_packages}}"
+
+    - name: Check "{{ item }}" is executable
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode == '0755'
+      loop: "{{ bin_stat.results }}"
+
+    - name: Check version command
+      ansible.builtin.command: "{{ item.cmd }}"
+      changed_when: false
+      loop:
+        - cmd: "kubectl version --client"
+        - cmd: "kubeadm version"
+        - cmd: "kubelet --version"

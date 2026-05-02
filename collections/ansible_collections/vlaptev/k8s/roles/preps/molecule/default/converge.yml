@@ -6,4 +6,4 @@
   tasks:
     - name: Apply role under test
       ansible.builtin.include_role:
-        name: "vlaptev.k8s.crio"
+        name: "vlaptev.k8s.preps"
