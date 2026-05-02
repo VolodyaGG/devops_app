@@ -1,0 +1,35 @@
+---
+- name: Add k8s user
+  ansible.builtin.user:
+    name: "{{ k8s_user }}"
+    state: present
+    create_home: true
+
+- name: Add k8s key
+  ansible.builtin.get_url:
+    url: "https://download.opensuse.org/repositories/isv:/kubernetes:/core:/stable:/v{{ k8s_version }}/deb/Release.key"
+    dest: /tmp/k8s-release.key
+    mode: '0644'
+
+- name: Dearmor k8s key
+  ansible.builtin.shell:
+    cmd: "gpg --dearmor -o /etc/apt/keyrings/k8s-apt-keyring.gpg /tmp/k8s-release.key"
+    creates: /etc/apt/keyrings/k8s-apt-keyring.gpg
+
+- name: Add k8s repo
+  ansible.builtin.apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/k8s-apt-keyring.gpg] https://download.opensuse.org/repositories/isv:/kubernetes:/core:/stable:/v{{ k8s_version }}/deb/ /"
+    state: present
+
+- name: Install k8s packages
+  ansible.builtin.apt:
+    name: "{{ item }}"
+    state: present
+    update_cache: false
+  loop: "{{ k8s_packages }}"
+
+- name: Hold k8s packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ k8s_packages }}"

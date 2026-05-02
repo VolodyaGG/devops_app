@@ -1,0 +1,21 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Apply k8s_base role
+      ansible.builtin.include_role:
+        name: "vlaptev.k8s.k8s_base"
+
+    - name: Apply preps role
+      ansible.builtin.include_role:
+        name: "vlaptev.k8s.preps"
+
+    - name: Apply crio role
+      ansible.builtin.include_role:
+        name: "vlaptev.k8s.crio"
+
+    - name: Apply role under test
+      ansible.builtin.include_role:
+        name: "vlaptev.k8s.k8s_master"

@@ -1,0 +1,35 @@
+---
+- name: Destroy
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Unhold k8s packs
+      ansible.builtin.shell:
+        cmd: "apt-mark unhold {{ k8s_packages | join(' ') }}"
+      become: true
+      ignore_errors: true
+
+    - name: Remove k8s packs
+      ansible.builtin.apt:
+        name: "{{ k8s_packages }}"
+        state: absent
+        purge: true
+
+    - name: Remove k8s repo
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/k8s-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ k8s_version }}/deb/ /"
+        state: absent
+        update_cache: false
+
+    - name: Remove k8s key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/k8s-apt-keyring.asc
+        state: absent
+
+    - name: Remove k8s user
+      ansible.builtin.user:
+        name: "{{ k8s_user }}"
+        state: absent
+        remove: true
+      when: k8s_user != ansible_user

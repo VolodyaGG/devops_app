@@ -1,0 +1,32 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Check swap is disabled
+      ansible.builtin.assert:
+        that: ansible_facts['swaptotal_mb'] == 0
+
+    - name: Check swap not in fstab
+      ansible.builtin.command: grep -E '\sswap\s' /etc/fstab
+      register: swap_fstab
+      failed_when: swap_fstab.rc == 0
+      changed_when: false
+
+    - name: Check dependencies
+      ansible.builtin.package_facts:
+        manager: apt
+
+    - name: Assert dependencies
+      ansible.builtin.assert:
+        that: item in ansible_facts.packages
+      loop:
+        - curl
+        - ca-certificates
+        - apt-transport-https
+        - gnupg
+
+    - name: Check hostname
+      ansible.builtin.assert:
+        that: ansible_facts['hostname'] == inventory_hostname

@@ -1,0 +1,25 @@
+---
+- name: Verify
+  hosts: masters
+  become: true
+  become_user: "{{ k8s_user }}"
+  gather_facts: false
+  tasks:
+    - name: Check kubectl get nodes
+      ansible.builtin.command: kubectl get nodes
+      register: nodes
+      changed_when: false
+
+    - name: Show nodes
+      ansible.builtin.debug:
+        msg: "{{ nodes.stdout }}"
+
+    - name: Assert all nodes present
+      ansible.builtin.assert:
+        that:
+          - "'control-plane' in nodes.stdout"
+          - "'worker1' in nodes.stdout"
+
+    - name: Assert nodes are ready
+      ansible.builtin.assert:
+        that: nodes.stdout | regex_findall('Ready') | length >= 2

@@ -1,0 +1,42 @@
+---
+- name: Initialize cluster
+  ansible.builtin.command:
+    cmd: >
+      kubeadm init
+      --pod-network-cidr={{ pod_network_cidr }}
+      --cri-socket=unix:///var/run/crio/crio.sock
+  args:
+    creates: /etc/kubernetes/admin.conf
+  become: true
+
+- name: Create kubeconfig dir
+  ansible.builtin.file:
+    path: "/home/{{ k8s_user }}/.kube"
+    state: directory
+    owner: "{{ k8s_user }}"
+    group: "{{ k8s_user }}"
+    mode: '0755'
+
+- name: Copy kubeconfig
+  ansible.builtin.copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "/home/{{ k8s_user }}/.kube/config"
+    owner: "{{ k8s_user }}"
+    group: "{{ k8s_user }}"
+    mode: '0600'
+    remote_src: true
+  become: true
+
+- name: Get join command
+  ansible.builtin.command: kubeadm token create --print-join-command
+  register: join_cmd
+  changed_when: false
+  become: true
+
+- name: Save join command to file
+  ansible.builtin.copy:
+    content: "{{ join_cmd.stdout }}"
+    dest: /tmp/k8s_join_cmd
+  delegate_to: localhost
+  become: false
+  changed_when: false

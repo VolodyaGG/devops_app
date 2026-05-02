@@ -1,0 +1,149 @@
+---
+- name: Destroy
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Reset kubeadm
+      ansible.builtin.command: kubeadm reset -f
+      changed_when: false
+      failed_when: false
+
+    - name: Wait for containers to stop
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: Kill process on port 6443
+      ansible.builtin.shell:
+        cmd: "fuser -k 6443/tcp || true"
+      failed_when: false
+
+    - name: Stop kubelet
+      ansible.builtin.systemd:
+        name: kubelet
+        state: stopped
+      failed_when: false
+
+    - name: Umount kubelet dirs
+      ansible.builtin.shell:
+        cmd: "umount $(mount | grep '/var/lib/kubelet' | awk '{print $3}') 2>/dev/null || true"
+      failed_when: false
+
+    - name: Remove kubernetes dirs
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/kubernetes
+        - /var/lib/kubelet
+        - /var/lib/etcd
+
+    - name: Stop CRI-O
+      ansible.builtin.systemd:
+        name: crio
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Unhold k8s packs
+      ansible.builtin.shell:
+        cmd: "apt-mark unhold {{ k8s_packages | join(' ') }}"
+      ignore_errors: true
+
+    - name: Remove k8s packs
+      ansible.builtin.apt:
+        name: "{{ k8s_packages }}"
+        state: absent
+        purge: true
+      failed_when: false
+
+    - name: Remove CRI-O
+      ansible.builtin.apt:
+        name: cri-o
+        state: absent
+        purge: true
+      failed_when: false
+
+    - name: Remove k8s repo
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/k8s-apt-keyring.gpg] https://download.opensuse.org/repositories/isv:/kubernetes:/core:/stable:/v{{ k8s_version }}/deb/ /"
+        state: absent
+        update_cache: false
+      failed_when: false
+
+    - name: Remove k8s key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/k8s-apt-keyring.gpg
+        state: absent
+
+    - name: Remove CRI-O repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/cri-o-archive-keyring.asc] https://pkgs.k8s.io/addons:/cri-o:/stable:/v{{ crio_version }}/deb/ /"
+        state: absent
+        update_cache: false
+      failed_when: false
+
+    - name: Remove CRI-O key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/cri-o-archive-keyring.asc
+        state: absent
+
+    - name: Remove network parameters
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        state: absent
+        reload: true
+      loop:
+        - net.bridge.bridge-nf-call-iptables
+        - net.bridge.bridge-nf-call-ip6tables
+        - net.ipv4.ip_forward
+      failed_when: false
+
+    - name: Remove modules config
+      ansible.builtin.file:
+        path: /etc/modules-load.d/k8s.conf
+        state: absent
+
+    - name: Remove kernel modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - overlay
+        - br_netfilter
+      failed_when: false
+
+    - name: Remove CNI configs
+      ansible.builtin.file:
+        path: /etc/cni/net.d
+        state: absent
+
+    - name: Remove kubeconfig
+      ansible.builtin.file:
+        path: "/home/{{ k8s_user }}/.kube"
+        state: absent
+      failed_when: false
+
+    - name: Remove k8s user
+      ansible.builtin.user:
+        name: "{{ k8s_user }}"
+        state: absent
+        remove: true
+      when: k8s_user != ansible_user
+
+    - name: Restore swap in fstab
+      ansible.builtin.shell:
+        cmd: cat /etc/molecule-swap-backup >> /etc/fstab
+      args:
+        removes: /etc/molecule-swap-backup
+      failed_when: false
+
+    - name: Remove swap backup file
+      ansible.builtin.file:
+        path: /etc/molecule-swap-backup
+        state: absent
+
+    - name: Enable swap
+      ansible.builtin.command: swapon -a
+      changed_when: false
+      failed_when: false

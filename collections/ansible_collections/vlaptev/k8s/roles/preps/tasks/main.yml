@@ -1,0 +1,41 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install dependencies
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+    state: present
+
+- name: Disable swap
+  ansible.builtin.command: swapoff -a
+  when: ansible_facts['swaptotal_mb'] > 0
+  changed_when: ansible_facts['swaptotal_mb'] > 0
+
+- name: Remove swap
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '\sswap\s'
+    state: absent
+
+- name: Save swap fstab entry
+  ansible.builtin.command: grep -E '\sswap\s' /etc/fstab
+  register: swap_entry
+  changed_when: false
+  failed_when: false
+
+- name: Save swap entry to file
+  ansible.builtin.copy:
+    content: "{{ swap_entry.stdout }}"
+    dest: /etc/molecule-swap-backup
+  when: swap_entry.rc == 0
+
+- name: Set hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"

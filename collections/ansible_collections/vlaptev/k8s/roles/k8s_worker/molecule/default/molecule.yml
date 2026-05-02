@@ -1,0 +1,44 @@
+---
+dependency:
+  name: galaxy
+
+driver:
+  name: default
+
+platforms:
+  - name: k8s-master
+  - name: k8s-worker1
+
+provisioner:
+  name: ansible
+  inventory:
+    hosts:
+      all:
+        hosts:
+          k8s-master:
+            ansible_host: 10.184.0.118
+            ansible_user: worker
+            ansible_ssh_private_key_file: ~/.ssh/k8s_id
+          k8s-worker1:
+            ansible_host: 10.184.0.117
+            ansible_user: worker
+            ansible_ssh_private_key_file: ~/.ssh/k8s_id
+      masters:
+        hosts:
+          k8s-master:
+      workers:
+        hosts:
+          k8s-worker1:
+
+verifier:
+  name: ansible
+
+scenario:
+  name: default
+  test_sequence:
+    - destroy
+    - create
+    - converge
+    - idempotence
+    - verify
+    - destroy

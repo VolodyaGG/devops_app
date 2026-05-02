@@ -1,0 +1,10 @@
+---
+- name: Read join commanda
+  ansible.builtin.set_fact:
+    join_cmd: "{{ lookup('file', '/tmp/k8s_join_cmd') }}"
+
+- name: Join cluster
+  ansible.builtin.command: "{{ join_cmd }} --cri-socket=unix:///var/run/crio/crio.sock"
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  become: true

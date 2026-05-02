@@ -1,0 +1,80 @@
+---
+- name: Destroy
+  hosts: all
+  gather_facts: false
+  become: true
+  tasks:
+    - name: Stop CRI-O
+      ansible.builtin.systemd:
+        name: crio
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Remove CRI-O
+      ansible.builtin.apt:
+        name: cri-o
+        state: absent
+        purge: true
+
+    - name: Remove CRI-O repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/cri-o-archive-keyring.asc] https://pkgs.k8s.io/addons:/cri-o:/stable:/v{{ crio_version }}/deb/ /"
+        state: absent
+        update_cache: false
+
+    - name: Remove CRI-O key
+      ansible.builtin.file:
+        path: /etc/apt/keyrings/cri-o-archive-keyring.asc
+        state: absent
+
+    - name: Remove network parameters
+      ansible.posix.sysctl:
+        name: "{{ item }}"
+        state: absent
+        reload: yes
+      loop:
+        - net.bridge.bridge-nf-call-iptables
+        - net.bridge.bridge-nf-call-ip6tables
+        - net.ipv4.ip_forward
+
+    - name: Remove modules
+      ansible.builtin.file:
+        path: /etc/modules-load.d/k8s.conf
+        state: absent
+
+    - name: Remove kernel modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - overlay
+        - br_netfilter
+      ignore_errors: true
+      failed_when: false
+
+    - name: Remove crio capabilities config
+      ansible.builtin.blockinfile:
+        path: /etc/crio/crio.conf.d/10-crio.conf
+        block: |
+          default_capabilities = [
+            "CHOWN",
+            "DAC_OVERRIDE",
+            "FSETID",
+            "FOWNER",
+            "SETGID",
+            "SETUID",
+            "SETPCAP",
+            "NET_BIND_SERVICE",
+            "KILL",
+            "NET_RAW"
+          ]
+        state: absent
+      failed_when: false
+
+    - name: Restart crio after cleanup
+      ansible.builtin.systemd:
+        name: crio
+        state: restarted
+      failed_when: false
+
