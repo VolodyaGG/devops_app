@@ -1,0 +1,8 @@
+image:
+  repository: ""
+  tag: ""
+service:
+  targetPort: 8000
+ingress:
+  host: "cbr-app.local"
+  tlsSecret: "cbr-app-tls"
