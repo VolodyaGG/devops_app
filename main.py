@@ -13,6 +13,14 @@ def get_currency_service():
     service = CurrencyService.CurrencyService(adapter)
     return service
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/ready")
+def ready():
+    return {"status": "ok"}
+
 @app.get("/info")
 def info():
     return get_currency_service().get_service_info()

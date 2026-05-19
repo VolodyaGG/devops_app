@@ -18,3 +18,21 @@ resources:
 
 affinity:
   enabled: true
+
+probes:
+  startupProbe:
+    path: /healthz
+    failureThreshold: 30
+    periodSeconds: 10
+  livenessProbe:
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 2
+  readinessProbe:
+    path: /ready
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    failureThreshold: 3
+    timeoutSeconds: 2
