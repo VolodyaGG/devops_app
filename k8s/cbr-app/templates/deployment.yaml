@@ -37,3 +37,25 @@ spec:
           limits:
             cpu: {{ .Values.resources.limits.cpu | quote }}
             memory: {{ .Values.resources.limits.memory | quote }}
+        startupProbe:
+          httpGet:
+            path: {{ .Values.probes.startupProbe.path | default "/healthz" }}
+            port: {{ .Values.service.targetPort }}
+          failureThreshold: {{ .Values.probes.startupProbe.failureThreshold | default 30 }}
+          periodSeconds: {{ .Values.probes.startupProbe.periodSeconds | default 10 }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.probes.livenessProbe.path | default "/healthz" }}
+            port: {{ .Values.service.targetPort }}
+          initialDelaySeconds: {{ .Values.probes.livenessProbe.initialDelaySeconds | default 10 }}
+          periodSeconds: {{ .Values.probes.livenessProbe.periodSeconds | default 10 }}
+          failureThreshold: {{ .Values.probes.livenessProbe.failureThreshold | default 3 }}
+          timeoutSeconds: {{ .Values.probes.livenessProbe.timeoutSeconds | default 2 }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.probes.readinessProbe.path | default "/ready" }}
+            port: {{ .Values.service.targetPort }}
+          initialDelaySeconds: {{ .Values.probes.readinessProbe.initialDelaySeconds | default 5 }}
+          periodSeconds: {{ .Values.probes.readinessProbe.periodSeconds | default 5 }}
+          failureThreshold: {{ .Values.probes.readinessProbe.failureThreshold | default 3 }}
+          timeoutSeconds: {{ .Values.probes.readinessProbe.timeoutSeconds | default 2 }}
