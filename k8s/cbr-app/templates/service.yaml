@@ -7,6 +7,6 @@ spec:
     app: cbr-app
   ports:
   - protocol: TCP
-    port: 80
+    port: {{ .Values.service.port}}
     targetPort: {{ .Values.service.targetPort }}
   type: ClusterIP

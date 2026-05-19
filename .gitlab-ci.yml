@@ -4,6 +4,7 @@ stages:
   - build_and_push
   - sca
   - release
+  - deploy_check
   - trigger_deploy
 
 variables:
@@ -143,6 +144,7 @@ build_and_push:
       --dockerfile Dockerfile
       --target production
       --destination $DOCKER_LOGIN/client_server_app:production-$IMAGE_TAG
+      --destination $DOCKER_LOGIN/client_server_app:latest
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       variables:
@@ -211,30 +213,61 @@ release:
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v/'
 
-trigger_deploy:
-  stage: trigger_deploy
+smoke_test:
+  stage: deploy_check
   needs:
-    - job: build_and_push
-      optional: true
-  trigger:
-    include: .deploy-config.yml
-    strategy: depend
+    - build_and_push
+  tags:
+    - docker-runner
+  image: curlimages/curl@sha256:eb411f0a02b75f2c2342dbc2f6579905979dd65f61f1b3047067829bb553d149
   variables:
-    PORT: $PORT
-    SERVICE: $SERVICE
-    DOCKER_LOGIN: $DOCKER_LOGIN
-    STAGING_IP: $STAGING_IP
+    FF_NETWORK_PER_BUILD: "true"
+  before_script:
+    - echo $CA_CERT_BASE64 | base64 -d > /tmp/rootCA.pem
+  script:
+    - sleep 150
+    - 'curl -sf --cacert /tmp/rootCA.pem --resolve cbr-app.local:443:10.184.0.117 https://cbr-app.local/info | grep "\"service\":\"${SERVICE}\"" || exit 1'
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
     - if: '$CI_COMMIT_BRANCH == "master"'
       variables:
-        ENVIRONMENT: staging
         IMAGE_TAG: $CI_COMMIT_SHA
     - if: '$CI_COMMIT_TAG =~ /^v/'
       variables:
-        ENVIRONMENT: production
         IMAGE_TAG: $CI_COMMIT_TAG
-    - if: '$CI_PIPELINE_SOURCE == "web"'
-      when: manual
+
+dast_zap:
+  stage: deploy_check
+  needs:
+    - smoke_test
+  image:
+    name: zaproxy/zap-stable@sha256:c0c1477512485fd1a39bf50f6085ca951073036e7506a38dfb5ac414053dbd8e
+    entrypoint: [""]
+  tags:
+    - docker-runner
+  before_script:
+    - echo $CA_CERT_BASE64 | base64 -d > /tmp/rootCA.pem
+    - echo "10.184.0.117 cbr-app.local" >> /etc/hosts || true
+  script:
+    - mkdir -p /zap/wrk && chmod 777 /zap/wrk
+    - zap-api-scan.py -t "https://cbr-app.local/openapi.json" -f openapi -J zap_report.json -I
+    - cp /zap/wrk/zap_report.json ${CI_PROJECT_DIR}/zap_report.json
+  artifacts:
+    when: always
+    paths:
+      - zap_report.json
+    expire_in: 30 days
+    reports:
+      dast: zap_report.json
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       variables:
-        ENVIRONMENT: $ENVIRONMENT
-        IMAGE_TAG: $IMAGE_TAG
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_SHA
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      variables:
+        IMAGE_TAG: $CI_COMMIT_TAG
