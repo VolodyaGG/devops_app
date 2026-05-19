@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cbr-app
+  namespace: argocd
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: myimage=docker.io/volodyagg/client_server_app:latest
+    argocd-image-updater.argoproj.io/myimage.update-strategy: digest
+    argocd-image-updater.argoproj.io/myimage.helm.image-tag: image.tag
+    argocd-image-updater.argoproj.io/myimage.pull-secret: secret:argocd/dockerhub-secret
+spec:
+  project: default
+  source:
+    repoURL: https://education-git.yadro.com/education/devops/2026/v.laptev/app.git
+    targetRevision: master
+    path: k8s/cbr-app
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
